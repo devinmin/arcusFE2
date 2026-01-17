@@ -8,6 +8,8 @@ interface EditControlsProps {
   onSaveEdit?: () => void;
   onCancelEdit?: () => void;
   showManualEdit?: boolean;
+  promptPlaceholder?: string;
+  buttonLabel?: string;
 }
 
 export function EditControls({
@@ -16,7 +18,9 @@ export function EditControls({
   isEditing,
   onSaveEdit,
   onCancelEdit,
-  showManualEdit = true
+  showManualEdit = true,
+  promptPlaceholder = 'E.g., Make it more professional, add statistics, shorten to 50 words...',
+  buttonLabel = 'AI Refine'
 }: EditControlsProps) {
   const [showAIPrompt, setShowAIPrompt] = useState(false);
   const [aiPrompt, setAIPrompt] = useState('');
@@ -73,7 +77,7 @@ export function EditControls({
           className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
         >
           <Sparkles className="w-4 h-4" />
-          AI Refine
+          {buttonLabel}
         </button>
       </div>
 
@@ -85,7 +89,7 @@ export function EditControls({
           <textarea
             value={aiPrompt}
             onChange={(e) => setAIPrompt(e.target.value)}
-            placeholder="E.g., Make it more professional, add statistics, shorten to 50 words..."
+            placeholder={promptPlaceholder}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
             rows={3}
             disabled={isProcessing}

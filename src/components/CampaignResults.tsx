@@ -1,4 +1,5 @@
 import { FileText, Image, Mail, MessageSquare, Video, Megaphone, Download, RefreshCw, Home, Presentation, Edit } from 'lucide-react';
+import { EditControls } from './EditControls';
 import { useState } from 'react';
 import { CampaignResult, downloadAllCampaign, downloadDeliverable } from '../lib/api';
 import { VideoPlayer } from './VideoPlayer';
@@ -404,6 +405,30 @@ export function CampaignResults({ url, industry, data, onRetry, onSignOut }: Cam
     return editedContent[deliverableType] || getOriginalContent(deliverableType);
   };
 
+  const handleImageRegenerate = async (imageType: string, prompt: string) => {
+    if (!data?.campaignId) return;
+
+    try {
+      const result = await refineDeliverable({
+        campaignId: data.campaignId,
+        deliverableType: 'image',
+        currentContent: imageType,
+        refinementPrompt: prompt,
+        itemIndex: undefined,
+      });
+
+      if (result.success) {
+        // In production, this would update the image URL from the regenerated image
+        alert('Image regeneration requested. This feature will regenerate the image based on your prompt.');
+      } else {
+        alert(result.error || 'Failed to regenerate image');
+      }
+    } catch (error) {
+      console.error('Failed to regenerate image:', error);
+      alert('Failed to regenerate image. Please try again.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
@@ -579,6 +604,17 @@ export function CampaignResults({ url, industry, data, onRetry, onSignOut }: Cam
                             {image.format}
                           </span>
                         </div>
+
+                        <div className="mb-4">
+                          <EditControls
+                            onAIEdit={(prompt) => handleImageRegenerate(image.title, prompt)}
+                            isEditing={false}
+                            showManualEdit={false}
+                            buttonLabel="Regenerate Image"
+                            promptPlaceholder="E.g., Change background to sunset, add more vibrant colors, make it darker..."
+                          />
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <p className="text-gray-500 text-xs mb-1">Dimensions</p>
