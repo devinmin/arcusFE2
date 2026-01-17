@@ -12,6 +12,7 @@ import { AdCopyView } from './AdCopyView';
 import { VideoScriptView } from './VideoScriptView';
 import { BrandEditModal, BrandEditData } from './BrandEditModal';
 import { supabase } from '../lib/supabase';
+import { refineDeliverable } from '../lib/refine';
 
 interface CampaignResultsProps {
   url: string;
@@ -26,6 +27,7 @@ export function CampaignResults({ url, industry, data, onRetry, onSignOut }: Cam
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showBrandEditModal, setShowBrandEditModal] = useState(false);
   const [editedBrandData, setEditedBrandData] = useState<{ json: string; guidelines: string } | null>(null);
+  const [editedContent, setEditedContent] = useState<{ [key: string]: string }>({});
 
   const results = [
     {
@@ -330,6 +332,78 @@ export function CampaignResults({ url, industry, data, onRetry, onSignOut }: Cam
     }
   };
 
+  const handleContentUpdate = async (deliverableType: string, newContent: string) => {
+    if (!data?.campaignId) return;
+
+    try {
+      // Update local state
+      setEditedContent(prev => ({ ...prev, [deliverableType]: newContent }));
+
+      // Save to database
+      const updateField = `${deliverableType}_content`;
+      const { error } = await supabase
+        .from('campaign_results')
+        .update({
+          [updateField]: newContent,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('campaign_id', data.campaignId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Failed to save content update:', error);
+      alert('Failed to save changes. Please try again.');
+    }
+  };
+
+  const handleAIRefine = async (deliverableType: string, itemIndex: number | undefined, prompt: string) => {
+    if (!data?.campaignId) return;
+
+    try {
+      const currentContent = editedContent[deliverableType] || getOriginalContent(deliverableType);
+
+      const result = await refineDeliverable({
+        campaignId: data.campaignId,
+        deliverableType,
+        currentContent,
+        refinementPrompt: prompt,
+        itemIndex,
+      });
+
+      if (result.success && result.refinedContent) {
+        await handleContentUpdate(deliverableType, result.refinedContent);
+      } else {
+        alert(result.error || 'Failed to refine content');
+      }
+    } catch (error) {
+      console.error('Failed to refine content:', error);
+      alert('Failed to refine content. Please try again.');
+    }
+  };
+
+  const getOriginalContent = (deliverableType: string): string => {
+    switch (deliverableType) {
+      case 'strategicBrief':
+        return data?.deliverables.strategicBrief || '';
+      case 'socialMedia':
+        return data?.deliverables.socialMedia || '';
+      case 'emailSequence':
+        return data?.deliverables.emailSequence || '';
+      case 'blogArticle':
+        return data?.deliverables.blogArticle || '';
+      case 'adCopy':
+        return data?.deliverables.adCopy || '';
+      case 'videoScript':
+        return data?.deliverables.videoScript || '';
+      default:
+        return '';
+    }
+  };
+
+  const getDisplayContent = (deliverableType: string): string => {
+    return editedContent[deliverableType] || getOriginalContent(deliverableType);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
@@ -444,17 +518,37 @@ export function CampaignResults({ url, industry, data, onRetry, onSignOut }: Cam
                   guidelines={selectedResult.brandData.guidelines}
                 />
               ) : selectedResult.isStrategicBrief ? (
-                <StrategicBriefView content={selectedResult.content} />
+                <StrategicBriefView content={getDisplayContent('strategicBrief')} />
               ) : selectedResult.isSocialMedia ? (
-                <SocialMediaView content={selectedResult.content} />
+                <SocialMediaView
+                  content={getDisplayContent('socialMedia')}
+                  onContentUpdate={(newContent) => handleContentUpdate('socialMedia', newContent)}
+                  onAIRefine={(itemIndex, prompt) => handleAIRefine('socialMedia', itemIndex, prompt)}
+                />
               ) : selectedResult.isEmailSequence ? (
-                <EmailSequenceView content={selectedResult.content} />
+                <EmailSequenceView
+                  content={getDisplayContent('emailSequence')}
+                  onContentUpdate={(newContent) => handleContentUpdate('emailSequence', newContent)}
+                  onAIRefine={(itemIndex, prompt) => handleAIRefine('emailSequence', itemIndex, prompt)}
+                />
               ) : selectedResult.isBlogArticle ? (
-                <BlogArticleView content={selectedResult.content} />
+                <BlogArticleView
+                  content={getDisplayContent('blogArticle')}
+                  onContentUpdate={(newContent) => handleContentUpdate('blogArticle', newContent)}
+                  onAIRefine={(prompt) => handleAIRefine('blogArticle', undefined, prompt)}
+                />
               ) : selectedResult.isAdCopy ? (
-                <AdCopyView content={selectedResult.content} />
+                <AdCopyView
+                  content={getDisplayContent('adCopy')}
+                  onContentUpdate={(newContent) => handleContentUpdate('adCopy', newContent)}
+                  onAIRefine={(itemIndex, prompt) => handleAIRefine('adCopy', itemIndex, prompt)}
+                />
               ) : selectedResult.isVideoScript ? (
-                <VideoScriptView content={selectedResult.content} />
+                <VideoScriptView
+                  content={getDisplayContent('videoScript')}
+                  onContentUpdate={(newContent) => handleContentUpdate('videoScript', newContent)}
+                  onAIRefine={(itemIndex, prompt) => handleAIRefine('videoScript', itemIndex, prompt)}
+                />
               ) : selectedResult.isVideo && selectedResult.videoUrl ? (
                 <VideoPlayer
                   videoUrl={selectedResult.videoUrl}

@@ -1,10 +1,17 @@
 import { FileText, Search, Tag, Clock, Eye } from 'lucide-react';
+import { useState } from 'react';
+import { EditControls } from './EditControls';
 
 interface BlogArticleViewProps {
   content: string;
+  onContentUpdate?: (newContent: string) => void;
+  onAIRefine?: (prompt: string) => Promise<void>;
 }
 
-export function BlogArticleView({ content }: BlogArticleViewProps) {
+export function BlogArticleView({ content, onContentUpdate, onAIRefine }: BlogArticleViewProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
+
   const extractMetadata = (md: string) => {
     const metadata = {
       title: '',
@@ -66,6 +73,28 @@ export function BlogArticleView({ content }: BlogArticleViewProps) {
   const metadata = extractMetadata(content);
   const sections = extractSections(content);
 
+  const handleStartEdit = () => {
+    setIsEditing(true);
+    setEditedContent(content);
+  };
+
+  const handleSaveEdit = () => {
+    onContentUpdate?.(editedContent);
+    setIsEditing(false);
+    setEditedContent('');
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedContent('');
+  };
+
+  const handleAIRefine = async (prompt: string) => {
+    if (onAIRefine) {
+      await onAIRefine(prompt);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border border-blue-200 rounded-xl p-8">
@@ -122,10 +151,28 @@ export function BlogArticleView({ content }: BlogArticleViewProps) {
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
-          <h3 className="text-lg font-bold text-gray-900">Article Content</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">Article Content</h3>
+            <EditControls
+              onManualEdit={handleStartEdit}
+              onAIEdit={handleAIRefine}
+              isEditing={isEditing}
+              onSaveEdit={handleSaveEdit}
+              onCancelEdit={handleCancelEdit}
+            />
+          </div>
         </div>
 
         <div className="p-8 space-y-8">
+          {isEditing ? (
+            <textarea
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono"
+              rows={25}
+            />
+          ) : (
+            <div className="space-y-8">
           {sections.map((section, idx) => (
             <div key={idx} className="space-y-4">
               <h4 className="text-2xl font-bold text-gray-900 pb-3 border-b-2 border-blue-200">
@@ -160,6 +207,8 @@ export function BlogArticleView({ content }: BlogArticleViewProps) {
               </div>
             </div>
           ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

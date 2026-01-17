@@ -1,7 +1,11 @@
 import { Megaphone, Target, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+import { EditControls } from './EditControls';
 
 interface AdCopyViewProps {
   content: string;
+  onContentUpdate?: (newContent: string) => void;
+  onAIRefine?: (adIndex: number, prompt: string) => Promise<void>;
 }
 
 interface Ad {
@@ -19,7 +23,11 @@ interface AdCategory {
   icon: string;
 }
 
-export function AdCopyView({ content }: AdCopyViewProps) {
+export function AdCopyView({ content, onContentUpdate, onAIRefine }: AdCopyViewProps) {
+  const [editingAdKey, setEditingAdKey] = useState<string | null>(null);
+  const [editedHeadline, setEditedHeadline] = useState('');
+  const [editedBody, setEditedBody] = useState('');
+
   const parseAds = (md: string): Ad[] => {
     const ads: Ad[] = [];
     const sections = md.split(/(?=##\s+\d+\.|##\s+Ad\s+\d+|##\s+[A-Za-z]+\s+Ad|\*Variant)/i);
@@ -133,6 +141,65 @@ export function AdCopyView({ content }: AdCopyViewProps) {
 
   const categories = categorizeAds(ads);
 
+  const handleStartEdit = (catIdx: number, adIdx: number) => {
+    const ad = categories[catIdx].ads[adIdx];
+    setEditingAdKey(`${catIdx}-${adIdx}`);
+    setEditedHeadline(ad.headline);
+    setEditedBody(ad.body);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingAdKey) return;
+
+    const [catIdx, adIdx] = editingAdKey.split('-').map(Number);
+    const updatedAds = [...ads];
+    const ad = categories[catIdx].ads[adIdx];
+
+    // Find the ad in the original ads array
+    const adIndexInOriginal = updatedAds.findIndex(a =>
+      a.platform === ad.platform && a.headline === ad.headline && a.body === ad.body
+    );
+
+    if (adIndexInOriginal !== -1) {
+      updatedAds[adIndexInOriginal].headline = editedHeadline;
+      updatedAds[adIndexInOriginal].body = editedBody;
+
+      // Rebuild markdown
+      const newMarkdown = updatedAds.map((ad, idx) => {
+        let md = `## ${idx + 1}. ${ad.platform}\n\n`;
+        md += `**Headline:** ${ad.headline}\n\n`;
+        md += `**Body:** ${ad.body}\n\n`;
+        if (ad.cta) md += `**CTA:** ${ad.cta}\n\n`;
+        if (ad.targeting) md += `**Targeting:** ${ad.targeting}\n\n`;
+        return md;
+      }).join('\n');
+
+      onContentUpdate?.(newMarkdown);
+    }
+
+    setEditingAdKey(null);
+    setEditedHeadline('');
+    setEditedBody('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingAdKey(null);
+    setEditedHeadline('');
+    setEditedBody('');
+  };
+
+  const handleAIRefine = async (catIdx: number, adIdx: number, prompt: string) => {
+    if (onAIRefine) {
+      // Calculate global ad index
+      let globalAdIndex = 0;
+      for (let i = 0; i < catIdx; i++) {
+        globalAdIndex += categories[i].ads.length;
+      }
+      globalAdIndex += adIdx;
+      await onAIRefine(globalAdIndex, prompt);
+    }
+  };
+
   const getPlatformColor = (platform: string) => {
     const lower = platform.toLowerCase();
     if (lower.includes('google')) return {
@@ -231,7 +298,10 @@ export function AdCopyView({ content }: AdCopyViewProps) {
               </div>
 
               <div className="divide-y divide-gray-200">
-                {category.ads.map((ad, adIdx) => (
+                {category.ads.map((ad, adIdx) => {
+                  const isEditing = editingAdKey === `${catIdx}-${adIdx}`;
+
+                  return (
                   <div key={adIdx} className="p-6 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start gap-6">
                       <div className="flex-shrink-0">
@@ -241,23 +311,51 @@ export function AdCopyView({ content }: AdCopyViewProps) {
                       </div>
 
                       <div className="flex-1">
+                        <div className="mb-3">
+                          <EditControls
+                            onManualEdit={() => handleStartEdit(catIdx, adIdx)}
+                            onAIEdit={(prompt) => handleAIRefine(catIdx, adIdx, prompt)}
+                            isEditing={isEditing}
+                            onSaveEdit={handleSaveEdit}
+                            onCancelEdit={handleCancelEdit}
+                          />
+                        </div>
+
                         <div className="space-y-3">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Headline</span>
                             </div>
-                            <h5 className="text-lg font-bold text-gray-900 leading-tight">
-                              {ad.headline}
-                            </h5>
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editedHeadline}
+                                onChange={(e) => setEditedHeadline(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-lg font-bold focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            ) : (
+                              <h5 className="text-lg font-bold text-gray-900 leading-tight">
+                                {ad.headline}
+                              </h5>
+                            )}
                           </div>
 
                           {ad.body && (
                             <div>
                               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Body</span>
-                              <p className="text-sm text-gray-700 mt-1 leading-relaxed">
-                                {ad.body}
-                              </p>
+                              {isEditing ? (
+                                <textarea
+                                  value={editedBody}
+                                  onChange={(e) => setEditedBody(e.target.value)}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                  rows={3}
+                                />
+                              ) : (
+                                <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                                  {ad.body}
+                                </p>
+                              )}
                             </div>
                           )}
 
@@ -283,7 +381,8 @@ export function AdCopyView({ content }: AdCopyViewProps) {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

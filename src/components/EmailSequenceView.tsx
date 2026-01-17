@@ -1,7 +1,11 @@
 import { Mail, Send, Target, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { EditControls } from './EditControls';
 
 interface EmailSequenceViewProps {
   content: string;
+  onContentUpdate?: (newContent: string) => void;
+  onAIRefine?: (emailIndex: number, prompt: string) => Promise<void>;
 }
 
 interface Email {
@@ -13,7 +17,11 @@ interface Email {
   timing?: string;
 }
 
-export function EmailSequenceView({ content }: EmailSequenceViewProps) {
+export function EmailSequenceView({ content, onContentUpdate, onAIRefine }: EmailSequenceViewProps) {
+  const [editingEmailIndex, setEditingEmailIndex] = useState<number | null>(null);
+  const [editedBody, setEditedBody] = useState<string>('');
+  const [editedSubject, setEditedSubject] = useState<string>('');
+
   const parseEmails = (md: string): Email[] => {
     const emails: Email[] = [];
     const sections = md.split(/(?=##\s+Email\s+\d+|##\s+\d+\.)/);
@@ -55,6 +63,47 @@ export function EmailSequenceView({ content }: EmailSequenceViewProps) {
   };
 
   const emails = parseEmails(content);
+
+  const handleStartEdit = (emailIndex: number) => {
+    setEditingEmailIndex(emailIndex);
+    setEditedBody(emails[emailIndex].body);
+    setEditedSubject(emails[emailIndex].subject);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingEmailIndex === null) return;
+
+    const updatedEmails = [...emails];
+    updatedEmails[editingEmailIndex].body = editedBody;
+    updatedEmails[editingEmailIndex].subject = editedSubject;
+
+    const newMarkdown = updatedEmails.map((email) => {
+      let md = `## Email ${email.number}\n\n`;
+      md += `**Subject:** ${email.subject}\n\n`;
+      if (email.preheader) md += `**Preheader:** ${email.preheader}\n\n`;
+      md += `${email.body}\n\n`;
+      if (email.cta) md += `**CTA:** ${email.cta}\n\n`;
+      if (email.timing) md += `**Timing:** ${email.timing}\n\n`;
+      return md;
+    }).join('\n');
+
+    onContentUpdate?.(newMarkdown);
+    setEditingEmailIndex(null);
+    setEditedBody('');
+    setEditedSubject('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingEmailIndex(null);
+    setEditedBody('');
+    setEditedSubject('');
+  };
+
+  const handleAIRefine = async (emailIndex: number, prompt: string) => {
+    if (onAIRefine) {
+      await onAIRefine(emailIndex, prompt);
+    }
+  };
 
   const emailColors = [
     { bg: 'from-blue-500 to-blue-600', light: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600' },
@@ -109,10 +158,43 @@ export function EmailSequenceView({ content }: EmailSequenceViewProps) {
 
                 <div className="p-6">
                   <div className="mb-4">
+                    <EditControls
+                      onManualEdit={() => handleStartEdit(idx)}
+                      onAIEdit={(prompt) => handleAIRefine(idx, prompt)}
+                      isEditing={editingEmailIndex === idx}
+                      onSaveEdit={handleSaveEdit}
+                      onCancelEdit={handleCancelEdit}
+                    />
+                  </div>
+
+                  {editingEmailIndex === idx && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Subject Line
+                      </label>
+                      <input
+                        type="text"
+                        value={editedSubject}
+                        onChange={(e) => setEditedSubject(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+
+                  <div className="mb-4">
                     <div className={`${colors.light} ${colors.border} border rounded-lg p-6`}>
-                      <p className="text-base text-gray-900 leading-relaxed whitespace-pre-line">
-                        {email.body}
-                      </p>
+                      {editingEmailIndex === idx ? (
+                        <textarea
+                          value={editedBody}
+                          onChange={(e) => setEditedBody(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                          rows={10}
+                        />
+                      ) : (
+                        <p className="text-base text-gray-900 leading-relaxed whitespace-pre-line">
+                          {email.body}
+                        </p>
+                      )}
                     </div>
                   </div>
 

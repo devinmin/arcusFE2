@@ -1,7 +1,11 @@
 import { Instagram, Facebook, Twitter, Linkedin, Hash, Calendar, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+import { EditControls } from './EditControls';
 
 interface SocialMediaViewProps {
   content: string;
+  onContentUpdate?: (newContent: string) => void;
+  onAIRefine?: (postIndex: number, prompt: string) => Promise<void>;
 }
 
 interface SocialPost {
@@ -12,7 +16,10 @@ interface SocialPost {
   engagementHooks?: string[];
 }
 
-export function SocialMediaView({ content }: SocialMediaViewProps) {
+export function SocialMediaView({ content, onContentUpdate, onAIRefine }: SocialMediaViewProps) {
+  const [editingPostIndex, setEditingPostIndex] = useState<number | null>(null);
+  const [editedContent, setEditedContent] = useState<string>('');
+
   const parseSocialMedia = (md: string): SocialPost[] => {
     const posts: SocialPost[] = [];
 
@@ -151,6 +158,54 @@ export function SocialMediaView({ content }: SocialMediaViewProps) {
 
   const posts = parseSocialMedia(content);
 
+  const handleStartEdit = (postIndex: number) => {
+    setEditingPostIndex(postIndex);
+    setEditedContent(posts[postIndex].content);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingPostIndex === null) return;
+
+    // Reconstruct the markdown with updated content
+    const updatedPosts = [...posts];
+    updatedPosts[editingPostIndex].content = editedContent;
+
+    // Rebuild markdown
+    const newMarkdown = updatedPosts.map((post, idx) => {
+      let md = `### ${idx + 1}. ${post.platform} Post\n\n`;
+      md += `**Copy:**\n${post.content}\n\n`;
+      if (post.hashtags.length > 0) {
+        md += `**Hashtags:** ${post.hashtags.join(' ')}\n\n`;
+      }
+      if (post.timing) {
+        md += `**Suggested Posting Time:**\n${post.timing}\n\n`;
+      }
+      if (post.engagementHooks && post.engagementHooks.length > 0) {
+        md += `**Expected Engagement Hooks:**\n`;
+        post.engagementHooks.forEach(hook => {
+          md += `- ${hook}\n`;
+        });
+        md += '\n';
+      }
+      return md;
+    }).join('\n');
+
+    onContentUpdate?.(newMarkdown);
+    setEditingPostIndex(null);
+    setEditedContent('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPostIndex(null);
+    setEditedContent('');
+  };
+
+  const handleAIRefine = async (postIndex: number, prompt: string) => {
+    if (onAIRefine) {
+      await onAIRefine(postIndex, prompt);
+    }
+  };
+
   const getPlatformIcon = (platform: string) => {
     const lower = platform.toLowerCase();
     if (lower.includes('instagram')) return Instagram;
@@ -207,9 +262,28 @@ export function SocialMediaView({ content }: SocialMediaViewProps) {
 
               <div className="p-6">
                 <div className="mb-4">
-                  <p className="text-base text-gray-900 leading-relaxed whitespace-pre-line">
-                    {post.content}
-                  </p>
+                  <EditControls
+                    onManualEdit={() => handleStartEdit(idx)}
+                    onAIEdit={(prompt) => handleAIRefine(idx, prompt)}
+                    isEditing={editingPostIndex === idx}
+                    onSaveEdit={handleSaveEdit}
+                    onCancelEdit={handleCancelEdit}
+                  />
+                </div>
+
+                <div className="mb-4">
+                  {editingPostIndex === idx ? (
+                    <textarea
+                      value={editedContent}
+                      onChange={(e) => setEditedContent(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={8}
+                    />
+                  ) : (
+                    <p className="text-base text-gray-900 leading-relaxed whitespace-pre-line">
+                      {post.content}
+                    </p>
+                  )}
                 </div>
 
                 {post.engagementHooks && post.engagementHooks.length > 0 && (

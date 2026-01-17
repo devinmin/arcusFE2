@@ -1,7 +1,11 @@
 import { Video, Clock, Film, Volume2, Image as ImageIcon } from 'lucide-react';
+import { useState } from 'react';
+import { EditControls } from './EditControls';
 
 interface VideoScriptViewProps {
   content: string;
+  onContentUpdate?: (newContent: string) => void;
+  onAIRefine?: (sceneIndex: number, prompt: string) => Promise<void>;
 }
 
 interface Scene {
@@ -12,7 +16,11 @@ interface Scene {
   text?: string;
 }
 
-export function VideoScriptView({ content }: VideoScriptViewProps) {
+export function VideoScriptView({ content, onContentUpdate, onAIRefine }: VideoScriptViewProps) {
+  const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
+  const [editedVisual, setEditedVisual] = useState('');
+  const [editedAudio, setEditedAudio] = useState('');
+
   const parseScript = (md: string) => {
     const metadata = {
       title: '',
@@ -61,6 +69,52 @@ export function VideoScriptView({ content }: VideoScriptViewProps) {
   };
 
   const { metadata, scenes } = parseScript(content);
+
+  const handleStartEdit = (sceneIndex: number) => {
+    setEditingSceneIndex(sceneIndex);
+    setEditedVisual(scenes[sceneIndex].visual);
+    setEditedAudio(scenes[sceneIndex].audio);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingSceneIndex === null) return;
+
+    const updatedScenes = [...scenes];
+    updatedScenes[editingSceneIndex].visual = editedVisual;
+    updatedScenes[editingSceneIndex].audio = editedAudio;
+
+    // Rebuild markdown
+    let newMarkdown = `# ${metadata.title || 'Video Script'}\n\n`;
+    if (metadata.duration) newMarkdown += `**Duration:** ${metadata.duration}\n`;
+    if (metadata.style) newMarkdown += `**Style:** ${metadata.style}\n`;
+    if (metadata.music) newMarkdown += `**Music:** ${metadata.music}\n\n`;
+
+    updatedScenes.forEach(scene => {
+      newMarkdown += `## Scene ${scene.number}\n\n`;
+      if (scene.duration) newMarkdown += `**Duration:** ${scene.duration}\n`;
+      newMarkdown += `**Visual:** ${scene.visual}\n`;
+      newMarkdown += `**Audio:** ${scene.audio}\n`;
+      if (scene.text) newMarkdown += `**Text:** ${scene.text}\n`;
+      newMarkdown += '\n';
+    });
+
+    onContentUpdate?.(newMarkdown);
+    setEditingSceneIndex(null);
+    setEditedVisual('');
+    setEditedAudio('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSceneIndex(null);
+    setEditedVisual('');
+    setEditedAudio('');
+  };
+
+  const handleAIRefine = async (sceneIndex: number, prompt: string) => {
+    if (onAIRefine) {
+      await onAIRefine(sceneIndex, prompt);
+    }
+  };
 
   const sceneColors = [
     { bg: 'from-purple-500 to-purple-600', light: 'bg-purple-50', border: 'border-purple-200' },
@@ -144,6 +198,14 @@ export function VideoScriptView({ content }: VideoScriptViewProps) {
                 </div>
 
                 <div className="p-6 space-y-6">
+                  <EditControls
+                    onManualEdit={() => handleStartEdit(idx)}
+                    onAIEdit={(prompt) => handleAIRefine(idx, prompt)}
+                    isEditing={editingSceneIndex === idx}
+                    onSaveEdit={handleSaveEdit}
+                    onCancelEdit={handleCancelEdit}
+                  />
+
                   {scene.visual && (
                     <div>
                       <div className="flex items-center gap-2 mb-3">
@@ -151,9 +213,18 @@ export function VideoScriptView({ content }: VideoScriptViewProps) {
                         <h5 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Visual</h5>
                       </div>
                       <div className={`${colors.light} ${colors.border} border rounded-lg p-4`}>
-                        <p className="text-base text-gray-900 leading-relaxed">
-                          {scene.visual}
-                        </p>
+                        {editingSceneIndex === idx ? (
+                          <textarea
+                            value={editedVisual}
+                            onChange={(e) => setEditedVisual(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                            rows={3}
+                          />
+                        ) : (
+                          <p className="text-base text-gray-900 leading-relaxed">
+                            {scene.visual}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -165,9 +236,18 @@ export function VideoScriptView({ content }: VideoScriptViewProps) {
                         <h5 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Audio / Voiceover</h5>
                       </div>
                       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <p className="text-base text-gray-900 leading-relaxed italic">
-                          "{scene.audio}"
-                        </p>
+                        {editingSceneIndex === idx ? (
+                          <textarea
+                            value={editedAudio}
+                            onChange={(e) => setEditedAudio(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none italic"
+                            rows={3}
+                          />
+                        ) : (
+                          <p className="text-base text-gray-900 leading-relaxed italic">
+                            "{scene.audio}"
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
